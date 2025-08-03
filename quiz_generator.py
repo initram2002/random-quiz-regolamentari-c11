@@ -2,11 +2,9 @@
 Quiz Generator
 ================================================
 Genera una batteria di 20 domande regolamentari rispettando:
-  • Una (e solo una) domanda per ciascuna delle 17 Regole del Giuoco del Calcio
-    + 1 del Regolamento dell'Associazione Italiana Arbitri + 1 del Regolamento degli Organi Tecnici dell'Associazione Italiana Arbitri.
-  • La 20ª domanda può appartenere a qualunque Regola, purché l'ID non sia mai
-    stato usato nei tre quiz precedenti.
-  • Nessun ID già apparso nei tre quiz precedenti può essere riproposto.
+- Una (e solo una) domanda per ciascuna delle 17 Regole del Giuoco del Calcio + 1 del Regolamento dell'Associazione Italiana Arbitri + 1 del Regolamento degli Organi Tecnici dell'Associazione Italiana Arbitri.
+- La 20ª domanda può appartenere a qualunque Regola, purché l'ID non sia mai stato usato nei tre quiz precedenti.
+- Nessun ID già apparso nei tre quiz precedenti può essere riproposto.
 
 Formato di output
 -----------------
