@@ -1,25 +1,26 @@
 """
-Quiz Generator
+Quiz Generator per Women Project AIA Chivasso
 ================================================
-Genera una batteria di 20 domande regolamentari rispettando:
-- Una (e solo una) domanda per ciascuna delle 17 Regole del Giuoco del Calcio + 1 del Regolamento dell'Associazione Italiana Arbitri + 1 del Regolamento degli Organi Tecnici dell'Associazione Italiana Arbitri.
-- La 20ª domanda può appartenere a qualunque Regola, purché l'ID non sia mai stato usato nei tre quiz precedenti.
-- Nessun ID già apparso nei tre quiz precedenti può essere riproposto.
+Genera settimanalmente una batteria di 20 domande regolamentari, **solo** dalle
+Regole 1-17 del Giuoco del Calcio (niente Regolamento associativo AIA, niente
+Norme di Funzionamento degli Organi Tecnici).
+
+Vincoli
+-------
+1) Le prime 17 domande: una per ciascuna Regola 1-17, tutte diverse tra loro.
+2) Le ultime 3 domande (18ª, 19ª, 20ª):
+   • devono essere ID mai apparsi nei tre quiz precedenti;
+   • devono appartenere a **tre Regole diverse tra loro** (scelte tra 1-17);
+   • è ammesso che ripetano Regole già usate nelle prime 17 (ovviamente con ID diversi).
+3) Nessun ID si può ripetere all'interno del quiz corrente.
 
 Formato di output
 -----------------
-Le linee prodotte sono del tipo:
+Ogni riga è del tipo:
 ```
-Regola 1:  37
-Regola 2:  51
-…
-Regola ASS:  630
-Regola NFOT:  701
+Regola x: y
 ```
-
-- Per le Regole 1-17 il prefisso resta «Regola n».  
-- Per la Regola 18 il prefisso diventa «Regola ASS».  
-- Per la Regola 19 il prefisso diventa «Regola NFOT».
+Dove `x` ∈ {1,…,17} e `y` è l'ID domanda (1-621).
 """
 from __future__ import annotations
 
@@ -27,118 +28,125 @@ import random
 from typing import Dict, List, Set, Tuple
 
 # ---------------------------------------------------------------------------
-# 1. Configurazione dei range per ciascuna Regola
+# 1) Range ID per ciascuna Regola (SOLO 1–17)
 # ---------------------------------------------------------------------------
-# Mappa: numero di Regola → range() corrispondente (estremo superiore INCLUSO)
 RULE_RANGES: Dict[int, range] = {
-    1: range(1, 44),        # 1 ‑ 43
-    2: range(44, 67),       # 44 ‑ 66
-    3: range(67, 116),      # 67 ‑ 115
-    4: range(116, 142),     # 116 ‑ 141
-    5: range(142, 183),     # 142 ‑ 182
-    6: range(183, 248),     # 183 ‑ 247
-    7: range(248, 271),     # 248 ‑ 270
-    8: range(271, 299),     # 271 ‑ 298
-    9: range(299, 309),     # 299 ‑ 308
-    10: range(309, 337),    # 309 ‑ 336
-    11: range(337, 367),    # 337 ‑ 366
-    12: range(367, 490),    # 367 ‑ 489
-    13: range(490, 526),    # 490 ‑ 525
-    14: range(526, 557),    # 526 ‑ 556
-    15: range(557, 583),    # 557 ‑ 582
-    16: range(583, 604),    # 583 ‑ 603
-    17: range(604, 622),    # 604 ‑ 621
-    18: range(622, 691),    # 622 ‑ 690 – Regolamento dell'Associazione Italiana Arbitri
-    19: range(691, 717),    # 691 ‑ 716 – Regolamento degli Organi Tecnici dell'Associazione Italiana Arbitri
+    1: range(1, 44),        # 1 - 43
+    2: range(44, 67),       # 44 - 66
+    3: range(67, 116),      # 67 - 115
+    4: range(116, 142),     # 116 - 141
+    5: range(142, 183),     # 142 - 182
+    6: range(183, 248),     # 183 - 247
+    7: range(248, 271),     # 248 - 270
+    8: range(271, 299),     # 271 - 298
+    9: range(299, 309),     # 299 - 308
+    10: range(309, 337),    # 309 - 336
+    11: range(337, 367),    # 337 - 366
+    12: range(367, 490),    # 367 - 489
+    13: range(490, 526),    # 490 - 525
+    14: range(526, 557),    # 526 - 556
+    15: range(557, 583),    # 557 - 582
+    16: range(583, 604),    # 583 - 603
+    17: range(604, 622),    # 604 - 621
 }
 
-# Etichette da mostrare nell’output (solo eccezioni rispetto al default)
-RULE_LABELS: Dict[int, str] = {
-    18: "ASS",
-    19: "NFOT",
-}
+ALL_VALID_IDS: Set[int] = set().union(*[set(r) for r in RULE_RANGES.values()])  # 1..621
 
 # ---------------------------------------------------------------------------
-# 2. Funzioni ausiliarie
+# 2) Funzioni ausiliarie
 # ---------------------------------------------------------------------------
 
 def get_rule(question_id: int) -> int:
-    """Restituisce il numero di Regola (1‑19) associata a *question_id*.
-
-    Solleva ValueError se l'ID non è compreso tra 1 e 716.
-    """
+    """Restituisce la Regola (1-17) associata all'ID o solleva ValueError."""
     for rule_no, rng in RULE_RANGES.items():
         if question_id in rng:
             return rule_no
-    raise ValueError("ID domanda fuori range: deve essere tra 1 e 716")
-
-
-def rule_label(rule_no: int) -> str:
-    """Ritorna l'etichetta da stampare per la Regola indicata."""
-    if rule_no in RULE_LABELS:
-        return f"Regola {RULE_LABELS[rule_no]}"
-    return f"Regola {rule_no}"
+    raise ValueError("ID fuori range per le Regole 1-17 (1..621)")
 
 
 def format_line(rule_no: int, question_id: int) -> str:
-    """Formatta la linea di output finale."""
-    return f"{rule_label(rule_no)}: {question_id}"
+    return f"Regola {rule_no}: {question_id}"
+
+
+def _available_pool(rule_no: int, previous_ids: Set[int], selected_ids: Set[int]) -> List[int]:
+    """Ritorna la lista degli ID disponibili per una regola, esclusi precedenti e già scelti."""
+    rng = RULE_RANGES[rule_no]
+    return [qid for qid in rng if qid not in previous_ids and qid not in selected_ids]
 
 
 # ---------------------------------------------------------------------------
-# 3. Funzione principale di generazione
+# 3) Generazione robusta e deterministica (rispetta sempre i vincoli o fallisce)
 # ---------------------------------------------------------------------------
 
 def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[str]:
-    """Genera l'elenco delle 20 domande secondo i vincoli richiesti.
+    """Genera 20 righe "Regola x: y" secondo i vincoli descritti.
 
-    Parametri
-    ---------
-    previous_ids : set[int]
-        Tutti gli ID apparsi nei tre quiz precedenti.
-    seed : int | None
-        Seed opzionale per `random.seed` (utile per test riproducibili).
+    Se non esistono abbastanza ID residui per una o più Regole, solleva un
+    RuntimeError con un messaggio esplicativo.
     """
     if seed is not None:
         random.seed(seed)
 
+    # Assicura che eventuali ID > 621 (es. da vecchi quiz) non interferiscano
+    previous_ids = {qid for qid in previous_ids if qid in ALL_VALID_IDS}
+
     selected: List[Tuple[int, int]] = []    # (regola, id)
-    rules_used: Set[int] = set()
     selected_ids: Set[int] = set()
 
-    while len(selected) < 20:
-        qid = random.randint(1, 716)
+    # --- Fase 1: una domanda per ciascuna Regola 1–17 ---
+    rules = list(RULE_RANGES.keys())
+    random.shuffle(rules)
 
-        # A) Scarta se già usato
-        if qid in previous_ids or qid in selected_ids:
-            continue
-
-        rule_no = get_rule(qid)
-
-        # B) Durante le prime 19 domande non si può ripetere la Regola
-        if len(selected) < 19 and rule_no in rules_used:
-            continue
-
-        # C) Accetta la domanda
-        selected.append((rule_no, qid))
+    for r in rules:
+        pool = _available_pool(r, previous_ids, selected_ids)
+        if not pool:
+            raise RuntimeError(
+                f"Nessun ID disponibile per la Regola {r} (tutti già usati nei tre quiz precedenti?)"
+            )
+        qid = random.choice(pool)
+        selected.append((r, qid))
         selected_ids.add(qid)
-        rules_used.add(rule_no)
 
-    # Mischia l'ordine finale
+    # --- Fase 2: tre domande aggiuntive, ognuna da una Regola diversa ---
+    extra_rule_candidates = [
+        r for r in rules if _available_pool(r, previous_ids, selected_ids)
+    ]
+    if len(extra_rule_candidates) < 3:
+        raise RuntimeError(
+            "Non ci sono almeno tre Regole con ID residui per le domande 18-20."
+        )
+
+    random.shuffle(extra_rule_candidates)
+    for r in extra_rule_candidates[:3]:
+        pool = _available_pool(r, previous_ids, selected_ids)
+        qid = random.choice(pool)
+        selected.append((r, qid))
+        selected_ids.add(qid)
+
+    # Ordine finale casuale e formattazione
     random.shuffle(selected)
     return [format_line(r, q) for r, q in selected]
 
 
 # ---------------------------------------------------------------------------
-# 4. Esempio di esecuzione (può essere eliminato o personalizzato)
+# 4) Esempio di esecuzione (personalizzare o rimuovere)
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Inserire qui gli ID effettivamente usati nei tre quiz precedenti
-    prev_quiz1 = [111, 25, 46, 676, 298, 537, 315, 511, 437, 604, 148, 577, 223, 596, 258, 346, 126, 712, 308, 135] # Quiz 1
-    prev_quiz2 = [569, 625, 491, 379, 35, 208, 107, 314, 117, 277, 53, 146, 702, 527, 586, 266, 611, 359, 304, 692] # Quiz 2
-    prev_quiz3 = [446, 264, 539, 206, 320, 29, 704, 686, 520, 141, 350, 574, 145, 597, 286, 110, 306, 58, 610, 239] # Quiz 3
+    # Inserire qui gli ID realmente usati nei tre quiz precedenti (solo 1..621)
+    prev_quiz1 = [446, 264, 539, 206, 320, 29, 704, 686, 520, 141, 350, 574, 145, 597, 286, 110, 306, 58, 610, 239] # Quiz 1
+    prev_quiz2 = [563, 312, 305, 285, 332, 614, 1, 403, 182, 603, 248, 93, 279, 355, 122, 551, 505, 64, 616, 224] # Quiz 2
+    prev_quiz3 = [564, 313, 307, 288, 333, 613, 2, 404, 181, 602, 249, 94, 280, 354, 123, 550, 506, 63, 617, 223] # Quiz 3
 
     previous_ids = set(prev_quiz1 + prev_quiz2 + prev_quiz3)
 
-    quiz_lines = generate_quiz(previous_ids, seed=42)  # seed per debug
+    quiz_lines = generate_quiz(previous_ids, seed=42)
     print("\n".join(quiz_lines))
+
+    # Stampa in aggiunta il vettore con i soli ID, nello stesso ordine delle righe sopra
+    try:
+        ids_vector = [int(line.split(":", 1)[1].strip()) for line in quiz_lines]
+        print()  # riga vuota di separazione
+        print("[" + ", ".join(str(x) for x in ids_vector) + "]")
+    except Exception:
+        # In caso di formati imprevisti, evita di interrompere l'esecuzione
+        pass
