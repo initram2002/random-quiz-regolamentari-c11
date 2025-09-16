@@ -74,8 +74,25 @@ def _available_pool(rule_no: int, previous_ids: Set[int], selected_ids: Set[int]
     return [qid for qid in rng if qid not in previous_ids and qid not in selected_ids]
 
 
+def _prefer_non_adjacent(pool: List[int], previous_ids: Set[int]) -> List[int]:
+    """Dato un pool disponibile, preferisce ID non adiacenti (±1) a quelli già usati.
+    Se la preferenza azzera il pool, restituisce il pool originale.
+    """
+    if not pool:
+        return pool
+    # Costruisci insieme di ID da evitare in via preferenziale (adiacenti)
+    adj = set()
+    for pid in previous_ids:
+        if pid - 1 in ALL_VALID_IDS:
+            adj.add(pid - 1)
+        if pid + 1 in ALL_VALID_IDS:
+            adj.add(pid + 1)
+    preferred = [q for q in pool if q not in adj]
+    return preferred if preferred else pool
+
+
 # ---------------------------------------------------------------------------
-# 3) Generazione robusta e deterministica (rispetta sempre i vincoli o fallisce)
+# 3) Generazione robusta e (di default) non deterministica
 # ---------------------------------------------------------------------------
 
 def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[str]:
@@ -84,8 +101,12 @@ def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[st
     Se non esistono abbastanza ID residui per una o più Regole, solleva un
     RuntimeError con un messaggio esplicativo.
     """
-    if seed is not None:
-        random.seed(seed)
+    # Usa RNG locale per non toccare lo stato globale e per evitare pattern.
+    rng: random.Random
+    if seed is None:
+        rng = random.SystemRandom()  # forte entropia di sistema
+    else:
+        rng = random.Random(seed)
 
     # Assicura che eventuali ID > 621 (es. da vecchi quiz) non interferiscano
     previous_ids = {qid for qid in previous_ids if qid in ALL_VALID_IDS}
@@ -95,7 +116,7 @@ def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[st
 
     # --- Fase 1: una domanda per ciascuna Regola 1–17 ---
     rules = list(RULE_RANGES.keys())
-    random.shuffle(rules)
+    rng.shuffle(rules)
 
     for r in rules:
         pool = _available_pool(r, previous_ids, selected_ids)
@@ -103,7 +124,9 @@ def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[st
             raise RuntimeError(
                 f"Nessun ID disponibile per la Regola {r} (tutti già usati nei tre quiz precedenti?)"
             )
-        qid = random.choice(pool)
+        # Preferenza anti-adiacenza per ridurre incrementi ±1 rispetto ai quiz precedenti
+        pool = _prefer_non_adjacent(pool, previous_ids)
+        qid = rng.choice(pool)
         selected.append((r, qid))
         selected_ids.add(qid)
 
@@ -116,30 +139,38 @@ def generate_quiz(previous_ids: Set[int], *, seed: int | None = None) -> List[st
             "Non ci sono almeno tre Regole con ID residui per le domande 18-20."
         )
 
-    random.shuffle(extra_rule_candidates)
+    rng.shuffle(extra_rule_candidates)
     for r in extra_rule_candidates[:3]:
         pool = _available_pool(r, previous_ids, selected_ids)
-        qid = random.choice(pool)
+        # Applica anche qui la preferenza anti-adiacenza
+        pool = _prefer_non_adjacent(pool, previous_ids)
+        qid = rng.choice(pool)
         selected.append((r, qid))
         selected_ids.add(qid)
 
     # Ordine finale casuale e formattazione
-    random.shuffle(selected)
+    rng.shuffle(selected)
     return [format_line(r, q) for r, q in selected]
 
 
 # ---------------------------------------------------------------------------
-# 4) Esempio di esecuzione (personalizzare o rimuovere)
+# 4) Esempio eseguibile da CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Genera una batteria di 20 domande (Regole 1–17)")
+    parser.add_argument("--seed", type=int, default=None, help="Seed opzionale per riprodurre l'estrazione")
+    args = parser.parse_args()
+
     # Inserire qui gli ID realmente usati nei tre quiz precedenti (solo 1..621)
-    prev_quiz1 = [446, 264, 539, 206, 320, 29, 704, 686, 520, 141, 350, 574, 145, 597, 286, 110, 306, 58, 610, 239] # Quiz 1
-    prev_quiz2 = [563, 312, 305, 285, 332, 614, 1, 403, 182, 603, 248, 93, 279, 355, 122, 551, 505, 64, 616, 224] # Quiz 2
-    prev_quiz3 = [564, 313, 307, 288, 333, 613, 2, 404, 181, 602, 249, 94, 280, 354, 123, 550, 506, 63, 617, 223] # Quiz 3
+    prev_quiz1 = [446, 264, 539, 206, 320, 29, 704, 686, 520, 141, 350, 574, 145, 597, 286, 110, 306, 58, 610, 239]  # Quiz 1
+    prev_quiz2 = [563, 312, 305, 285, 332, 614, 1, 403, 182, 603, 248, 93, 279, 355, 122, 551, 505, 64, 616, 224]  # Quiz 2
+    prev_quiz3 = [564, 313, 307, 288, 333, 613, 2, 404, 181, 602, 249, 94, 280, 354, 123, 550, 506, 63, 617, 223]  # Quiz 3
 
     previous_ids = set(prev_quiz1 + prev_quiz2 + prev_quiz3)
 
-    quiz_lines = generate_quiz(previous_ids, seed=42)
+    quiz_lines = generate_quiz(previous_ids, seed=args.seed)
     print("\n".join(quiz_lines))
 
     # Stampa in aggiunta il vettore con i soli ID, nello stesso ordine delle righe sopra
